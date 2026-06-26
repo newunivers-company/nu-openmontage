@@ -19,7 +19,7 @@ from schemas.artifacts import ARTIFACT_NAMES, validate_artifact
 # All known stages across all pipelines (used only for artifact name lookup).
 ALL_KNOWN_STAGES = frozenset([
     "research", "proposal", "idea", "script", "scene_plan",
-    "assets", "edit", "compose", "publish",
+    "character_design", "rig_plan", "assets", "edit", "compose", "publish",
 ])
 
 # Backward-compatible alias — existing code / tests that import STAGES still work.
@@ -33,6 +33,8 @@ CANONICAL_STAGE_ARTIFACTS = {
     "idea": "brief",
     "script": "script",
     "scene_plan": "scene_plan",
+    "character_design": "character_design",
+    "rig_plan": "rig_plan",
     "assets": "asset_manifest",
     "edit": "edit_decisions",
     "compose": "render_report",
@@ -92,16 +94,57 @@ def _load_checkpoint_schema() -> dict[str, Any]:
         return json.load(f)
 
 
+def _has_specific_pipeline_type(pipeline_type: str | None) -> bool:
+    return bool(pipeline_type and pipeline_type != "unknown")
+
+
+@lru_cache(maxsize=None)
+def _manifest_stage_produces(pipeline_type: str, stage: str) -> tuple[str, ...] | None:
+    """Return the manifest-declared artifacts produced by stage.
+
+    None means the manifest or stage could not be resolved; an empty tuple
+    means the manifest stage intentionally declares no produced artifacts.
+    """
+    try:
+        from lib.pipeline_loader import load_pipeline
+        manifest = load_pipeline(pipeline_type)
+    except Exception:
+        return None
+
+    for stage_def in manifest.get("stages", []):
+        if stage_def.get("name") == stage:
+            return tuple(stage_def.get("produces") or ())
+    return None
+
+
+def _required_artifacts_for_stage(
+    stage: str,
+    pipeline_type: str | None,
+) -> list[str]:
+    if _has_specific_pipeline_type(pipeline_type):
+        produces = _manifest_stage_produces(pipeline_type, stage)
+        if produces is not None:
+            return list(produces)
+
+    canonical_artifact = CANONICAL_STAGE_ARTIFACTS.get(stage)
+    return [canonical_artifact] if canonical_artifact else []
+
+
 def _validate_artifacts_for_stage(
     stage: str,
     status: str,
     artifacts: dict[str, Any],
+    pipeline_type: str | None = None,
 ) -> None:
-    required_artifact = CANONICAL_STAGE_ARTIFACTS[stage]
-    if status in {"completed", "awaiting_human"} and required_artifact not in artifacts:
+    required_artifacts = _required_artifacts_for_stage(stage, pipeline_type)
+    missing_artifacts = [
+        artifact for artifact in required_artifacts
+        if artifact not in artifacts
+    ]
+    if status in {"completed", "awaiting_human"} and missing_artifacts:
         raise CheckpointValidationError(
             f"Stage {stage!r} with status {status!r} must include "
-            f"canonical artifact {required_artifact!r}"
+            f"required artifact(s) {missing_artifacts!r}"
         )
 
     for artifact_name, artifact_data in artifacts.items():
@@ -131,7 +174,7 @@ def validate_checkpoint(checkpoint: dict[str, Any]) -> None:
     pipeline_type = checkpoint.get("pipeline_type")
 
     valid_stages = (
-        set(get_pipeline_stages(pipeline_type)) if pipeline_type
+        set(get_pipeline_stages(pipeline_type)) if _has_specific_pipeline_type(pipeline_type)
         else ALL_KNOWN_STAGES
     )
 
@@ -145,7 +188,7 @@ def validate_checkpoint(checkpoint: dict[str, Any]) -> None:
     if not isinstance(artifacts, dict):
         raise CheckpointValidationError("Checkpoint artifacts must be a dictionary")
 
-    _validate_artifacts_for_stage(stage, status, artifacts)
+    _validate_artifacts_for_stage(stage, status, artifacts, pipeline_type)
 
     try:
         jsonschema.validate(instance=checkpoint, schema=_load_checkpoint_schema())
@@ -210,7 +253,7 @@ def write_checkpoint(
 ) -> Path:
     """Write a checkpoint file for a pipeline stage."""
     valid_stages = (
-        set(get_pipeline_stages(pipeline_type)) if pipeline_type
+        set(get_pipeline_stages(pipeline_type)) if _has_specific_pipeline_type(pipeline_type)
         else ALL_KNOWN_STAGES
     )
     if stage not in valid_stages:
@@ -333,7 +376,7 @@ def get_next_stage(
     Uses pipeline-specific stage order so that pipelines with different
     stage sequences (e.g. cinematic vs explainer) progress correctly.
     """
-    stages = get_pipeline_stages(pipeline_type) if pipeline_type else STAGES
+    stages = get_pipeline_stages(pipeline_type)
     completed = set(get_completed_stages(pipeline_dir, project_id, pipeline_type))
     for stage in stages:
         if stage not in completed:

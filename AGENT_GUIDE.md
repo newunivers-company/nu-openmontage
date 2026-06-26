@@ -187,10 +187,14 @@ Infrastructure files:
 
 ## Project Directory Convention
 
-Every production run creates a project workspace under `projects/`. This directory is gitignored — all generated assets are regenerable.
+Every production run creates a project workspace under the configured `paths.projects_dir`.
+For this workspace, that is the NAS path
+`/mnt/newunivers-sdb/nu-openmontage/projects`. Local `projects/` remains a
+fallback only when the user explicitly approves local output because NAS is
+unavailable.
 
 ```
-projects/<project-name>/
+<paths.projects_dir>/<project-name>/
 ├── artifacts/          # JSON artifacts from each stage (research_brief, script, scene_plan, etc.)
 ├── assets/
 │   ├── images/         # Generated images (PNG)
@@ -204,7 +208,10 @@ projects/<project-name>/
 
 **Naming convention**: Use kebab-case derived from the video title (e.g., `hidden-math-of-nature`, `how-music-rewires-brain`).
 
-Create the project directory at pipeline initialization, before any stage runs. All tools and agents should write outputs to these paths — never to the repo root or ad-hoc locations.
+Create the project directory at pipeline initialization, before any stage runs.
+All tools and agents should write outputs to these paths — never to the repo
+root or ad-hoc locations. If `/mnt/newunivers-sdb` is not mounted, stop and
+surface it as a storage blocker before generation.
 
 ## Music Library
 
@@ -524,21 +531,21 @@ Each pipeline manifest's `tools_available` field declares what tools a stage can
 
 ## Stage Agents
 
-Each stage produces one canonical artifact that becomes the contract for the next stage. The stage director skill teaches the agent HOW to produce it.
+Each stage produces the artifact set declared in the pipeline manifest's `produces`. Those artifacts become the contract for the next stage. The stage director skill teaches the agent HOW to produce them.
 
-| Stage | Director Skill | Canonical output | Core quality bar |
+| Stage | Director Skill | Common outputs | Core quality bar |
 |------|---------------|------------------|------------------|
 | `idea` | `*-director.md` | `brief` | Clear hook, target platform, duration, tone, and user intent |
 | `script` | `*-director.md` | `script` | Structured sections, valid timing, coherent narration |
 | `scene_plan` | `*-director.md` | `scene_plan` | Ordered scenes, timings, asset requirements |
 | `assets` | `*-director.md` | `asset_manifest` | Provenance, paths, model/tool metadata, scene linkage |
 | `edit` | `*-director.md` | `edit_decisions` | Concrete cuts, overlays, subtitle/music decisions |
-| `compose` | `*-director.md` | `render_report` | Output paths, encoding profile, verification notes |
+| `compose` | `*-director.md` | `render_report`, `final_review` | Output paths plus actual post-render quality inspection |
 
 Stage contract rules:
 
-- A completed or awaiting-human checkpoint must include the stage's canonical artifact.
-- Canonical artifacts must validate against the JSON schema in `schemas/artifacts/`.
+- A completed or awaiting-human checkpoint must include every artifact listed in the current manifest stage's `produces`.
+- Schema-backed artifacts must validate against the JSON schema in `schemas/artifacts/`.
 - Non-canonical outputs such as media files belong in stage-specific directories.
 - Tools should record seeds/model versions for reproducibility.
 
@@ -565,7 +572,7 @@ The checkpoint protocol meta skill (`skills/meta/checkpoint-protocol.md`) teache
 
 ## Communication Protocol
 
-Agents coordinate through canonical JSON artifacts, checkpoints, pipeline manifests, and the tool registry.
+Agents coordinate through schema-backed JSON artifacts, checkpoints, pipeline manifests, and the tool registry.
 
 Primary files:
 
@@ -581,10 +588,10 @@ Primary files:
 
 Checkpoint rules:
 
-- Checkpoints live at `pipelines/<project_id>/checkpoint_<stage>.json`.
+- Checkpoints live at `<pipeline_dir>/<project_id>/checkpoint_<stage>.json`.
 - `status` may be `completed`, `failed`, `awaiting_human`, or `in_progress`.
-- `completed` and `awaiting_human` checkpoints must include the canonical artifact.
-- Invalid checkpoints or invalid canonical artifacts are contract violations and should fail fast.
+- `completed` and `awaiting_human` checkpoints must include every artifact listed in the current manifest stage's `produces`.
+- Invalid checkpoints or invalid schema-backed artifacts are contract violations and should fail fast.
 
 Pipeline manifest rules:
 

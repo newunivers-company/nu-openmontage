@@ -24,9 +24,8 @@ from lib.checkpoint import (
     read_checkpoint,
     get_completed_stages,
     get_next_stage,
-    STAGES,
-    CANONICAL_STAGE_ARTIFACTS,
 )
+from lib.pipeline_loader import get_stage_order, load_pipeline
 from tools.cost_tracker import CostTracker, BudgetMode
 from schemas.artifacts import validate_artifact, list_schemas
 from styles.playbook_loader import load_playbook, validate_accessibility
@@ -34,6 +33,7 @@ from styles.playbook_loader import load_playbook, validate_accessibility
 OUT = os.path.join(os.path.dirname(__file__), "output")
 PIPELINE_DIR = Path(OUT) / "e2e_pipeline"
 PROJECT_ID = "qa_e2e_test"
+PIPELINE_TYPE = "animated-explainer"
 ASSETS_DIR = Path(OUT) / "e2e_assets"
 
 # Clean previous run
@@ -77,6 +77,16 @@ def ensure_video(path, duration=5, width=1280, height=720, color="blue"):
          "-c:a", "aac", "-shortest", path],
         capture_output=True, check=True,
     )
+
+def srt_timestamp(seconds):
+    millis = int(round(seconds * 1000))
+    hours = millis // 3_600_000
+    millis %= 3_600_000
+    minutes = millis // 60_000
+    millis %= 60_000
+    secs = millis // 1000
+    millis %= 1000
+    return f"{hours:02d}:{minutes:02d}:{secs:02d},{millis:03d}"
 
 # ===================================================================
 # Setup: Cost tracker + playbook
@@ -150,7 +160,7 @@ except Exception as e:
 cp_path = write_checkpoint(
     PIPELINE_DIR, PROJECT_ID, "research", "completed",
     artifacts={"research_brief": research_brief},
-    pipeline_type="animated-explainer",
+    pipeline_type=PIPELINE_TYPE,
     style_playbook="clean-professional",
 )
 check("Research checkpoint written", cp_path.exists())
@@ -201,16 +211,24 @@ proposal_packet = {
     ],
     "selected_concept": {"concept_id": "c1", "rationale": "Direct problem/solution framing is most effective for this audience"},
     "production_plan": {
-        "pipeline": "animated-explainer",
+        "pipeline": PIPELINE_TYPE,
         "playbook": "clean-professional",
-        "render_runtime": "remotion",
+        "renderer_family": "explainer-data",
+        "render_runtime": "ffmpeg",
         "stages": [
             {"stage": "script", "tools": [{"tool_name": "tts_selector", "role": "narration", "available": True}], "approach": "AI-written script with TTS narration"},
             {"stage": "scene_plan", "tools": [], "approach": "5 scenes with motion graphics"},
             {"stage": "assets", "tools": [{"tool_name": "image_selector", "role": "visuals", "available": True}], "approach": "AI-generated images"},
             {"stage": "edit", "tools": [], "approach": "Automated edit decisions"},
-            {"stage": "compose", "tools": [{"tool_name": "video_compose", "role": "render", "available": True}], "approach": "Remotion render"},
+            {"stage": "compose", "tools": [{"tool_name": "video_compose", "role": "render", "available": True}], "approach": "Runtime-aware FFmpeg render path with final review"},
         ],
+        "delivery_promise": {
+            "promise_type": "data_explainer",
+            "motion_required": False,
+            "tone_mode": "educational",
+            "quality_floor": "presentable",
+            "approved_fallback": None,
+        },
     },
     "cost_estimate": {
         "total_estimated_usd": 0.50,
@@ -233,14 +251,60 @@ try:
 except Exception as e:
     check("Proposal packet validates against schema", False, str(e))
 
+decision_log = {
+    "version": "1.0",
+    "project_id": PROJECT_ID,
+    "decisions": [
+        {
+            "decision_id": "d-001",
+            "stage": "proposal",
+            "category": "render_runtime_selection",
+            "subject": "QA render runtime",
+            "options_considered": [
+                {
+                    "option_id": "ffmpeg",
+                    "label": "FFmpeg",
+                    "score": 1.0,
+                    "reason": "Available deterministic local path that still exercises render governance",
+                },
+                {
+                    "option_id": "remotion",
+                    "label": "Remotion",
+                    "score": 0.4,
+                    "reason": "Higher-fidelity scene composition path",
+                    "rejected_because": "Remotion dependencies are not guaranteed in this QA environment",
+                },
+                {
+                    "option_id": "hyperframes",
+                    "label": "HyperFrames",
+                    "score": 0.6,
+                    "reason": "Available HTML runtime, but unnecessary for video-cut fixture coverage",
+                    "rejected_because": "The fixture is designed to verify runtime-aware FFmpeg compose",
+                },
+            ],
+            "selected": "ffmpeg",
+            "reason": "Runs the actual render path without silently swapping runtime or requiring Node dependencies",
+            "user_visible": False,
+            "user_approved": True,
+            "confidence": 0.9,
+        }
+    ],
+}
+
+try:
+    validate_artifact("decision_log", decision_log)
+    check("Decision log validates against schema", True)
+except Exception as e:
+    check("Decision log validates against schema", False, str(e))
+
 cp_path = write_checkpoint(
     PIPELINE_DIR, PROJECT_ID, "proposal", "completed",
-    artifacts={"proposal_packet": proposal_packet},
-    pipeline_type="animated-explainer",
+    artifacts={"proposal_packet": proposal_packet, "decision_log": decision_log},
+    pipeline_type=PIPELINE_TYPE,
     style_playbook="clean-professional",
 )
 check("Proposal checkpoint written", cp_path.exists())
-check("Next stage after proposal", get_next_stage(PIPELINE_DIR, PROJECT_ID, "animated-explainer") == "script")
+check("Next stage after proposal", get_next_stage(PIPELINE_DIR, PROJECT_ID, PIPELINE_TYPE) == "script")
 
 # ===================================================================
 # Stage 2: script
@@ -285,9 +349,9 @@ except Exception as e:
 write_checkpoint(
     PIPELINE_DIR, PROJECT_ID, "script", "completed",
     artifacts={"script": script},
-    pipeline_type="animated-explainer",
+    pipeline_type=PIPELINE_TYPE,
 )
-check("Completed stages", get_completed_stages(PIPELINE_DIR, PROJECT_ID) == ["research", "proposal", "script"])  # research, proposal and script in pipeline order
+check("Completed stages", get_completed_stages(PIPELINE_DIR, PROJECT_ID, PIPELINE_TYPE) == ["research", "proposal", "script"])  # research, proposal and script in pipeline order
 
 # ===================================================================
 # Stage 3: scene_plan
@@ -295,6 +359,9 @@ check("Completed stages", get_completed_stages(PIPELINE_DIR, PROJECT_ID) == ["re
 print("\n--- Stage 3: scene_plan ---")
 
 SCENE_TYPES = ["text_card", "diagram", "animation", "generated", "text_card"]
+SHOT_SIZES = ["wide", "medium", "close_up", "insert", "medium_close"]
+CAMERA_MOVES = ["dolly_in", "pan_right", "zoom_in", "tracking_left", "static"]
+NARRATIVE_ROLES = ["introduce_subject", "establish_context", "deliver_payload", "evidence", "call_to_action"]
 scene_plan = {
     "version": "1.0",
     "style_playbook": "clean-professional",
@@ -306,6 +373,18 @@ scene_plan = {
             "start_seconds": start,
             "end_seconds": end,
             "script_section_id": sid,
+            "shot_language": {
+                "shot_size": SHOT_SIZES[i],
+                "camera_movement": CAMERA_MOVES[i],
+                "lens_mm": [24, 35, 50, 85, 50][i],
+                "lighting_key": "high_key",
+                "depth_of_field": "deep",
+                "color_temperature": "neutral",
+            },
+            "shot_intent": f"Advance the {label.lower()} beat with a distinct visual rhythm",
+            "narrative_role": NARRATIVE_ROLES[i],
+            "information_role": f"Viewer understands the {label.lower()} point",
+            "hero_moment": label == "Climax",
             "required_assets": [
                 {"type": "narration", "description": f"TTS narration for {label}", "source": "generate"},
                 {"type": "image", "description": f"Visual for {label}", "source": "generate"},
@@ -324,7 +403,7 @@ except Exception as e:
 write_checkpoint(
     PIPELINE_DIR, PROJECT_ID, "scene_plan", "completed",
     artifacts={"scene_plan": scene_plan},
-    pipeline_type="animated-explainer",
+    pipeline_type=PIPELINE_TYPE,
 )
 
 # ===================================================================
@@ -403,7 +482,7 @@ print(f"  Cost snapshot: {tracker.cost_snapshot()}")
 write_checkpoint(
     PIPELINE_DIR, PROJECT_ID, "assets", "completed",
     artifacts={"asset_manifest": asset_manifest},
-    pipeline_type="animated-explainer",
+    pipeline_type=PIPELINE_TYPE,
     cost_snapshot=tracker.cost_snapshot(),
 )
 
@@ -422,8 +501,16 @@ for i, scene in enumerate(scene_plan["scenes"]):
     ensure_video(vid_path, duration=dur, color=colors[i % len(colors)])
     scene_videos[scid] = vid_path
 
+subtitle_path = str(ASSETS_DIR / "captions.srt")
+with open(subtitle_path, "w", encoding="utf-8") as f:
+    for idx, (_, label, start, end, text) in enumerate(SECTIONS, start=1):
+        f.write(f"{idx}\n")
+        f.write(f"{srt_timestamp(start)} --> {srt_timestamp(end)}\n")
+        f.write(f"{label}: {text}\n\n")
+
 edit_decisions = {
     "version": "1.0",
+    "renderer_family": proposal_packet["production_plan"]["renderer_family"],
     "render_runtime": proposal_packet["production_plan"]["render_runtime"],
     "cuts": [
         {
@@ -445,6 +532,12 @@ edit_decisions = {
     "subtitles": {
         "enabled": True,
         "style": "clean-professional",
+        "source": subtitle_path,
+    },
+    "metadata": {
+        "playbook": "clean-professional",
+        "proposal_render_runtime": proposal_packet["production_plan"]["render_runtime"],
+        "delivery_promise": proposal_packet["production_plan"]["delivery_promise"],
     },
 }
 
@@ -457,7 +550,7 @@ except Exception as e:
 write_checkpoint(
     PIPELINE_DIR, PROJECT_ID, "edit", "completed",
     artifacts={"edit_decisions": edit_decisions},
-    pipeline_type="animated-explainer",
+    pipeline_type=PIPELINE_TYPE,
 )
 
 # ===================================================================
@@ -498,20 +591,39 @@ mix_result = mixer.execute({
 })
 check("Audio mix succeeded", mix_result.success, mix_result.error or "")
 
+script_text = " ".join(section["text"] for section in script["sections"])
+transcript_path = str(ASSETS_DIR / "narration_transcript.json")
+transcript_words = []
+for idx, token in enumerate(
+    script_text
+    .replace("?", "")
+    .replace(".", "")
+    .replace(",", "")
+    .split()
+):
+    transcript_words.append({
+        "word": token,
+        "start": round(idx * 0.28, 2),
+        "end": round(idx * 0.28 + 0.22, 2),
+    })
+with open(transcript_path, "w", encoding="utf-8") as f:
+    json.dump({"word_timestamps": transcript_words}, f)
+
 # Step 2: Compose video
 print("  Composing video...")
 composer = VideoCompose()
 final_video = str(Path(OUT) / "e2e_final_output.mp4")
 
 compose_result = composer.execute({
-    "operation": "compose",
-    "edit_decisions": {
-        "cuts": [
-            {"source": c["source"], "in_seconds": c["in_seconds"], "out_seconds": c["out_seconds"], "speed": c.get("speed", 1.0)}
-            for c in edit_decisions["cuts"]
-        ],
-    },
+    "operation": "render",
+    "edit_decisions": edit_decisions,
+    "asset_manifest": asset_manifest,
+    "proposal_packet": proposal_packet,
+    "scene_plan": scene_plan["scenes"],
+    "playbook": playbook,
     "audio_path": mix_output,
+    "narration_transcript_path": transcript_path,
+    "script_text": script_text,
     "codec": "libx264",
     "crf": 23,
     "preset": "fast",
@@ -519,6 +631,10 @@ compose_result = composer.execute({
 })
 check("Video compose succeeded", compose_result.success, compose_result.error or "")
 check("Output video exists", os.path.exists(final_video))
+
+final_review = (compose_result.data or {}).get("final_review", {})
+check("Final review attached", isinstance(final_review, dict) and bool(final_review))
+check("Final review status pass", final_review.get("status") == "pass", str(final_review.get("issues_found", []))[:300])
 
 # Probe the output
 duration = 0.0
@@ -564,6 +680,8 @@ render_report = {
         }
     ],
     "render_time_seconds": compose_result.duration_seconds,
+    "render_grammar": edit_decisions["renderer_family"],
+    "final_review_ref": "inline:final_review",
 }
 
 try:
@@ -572,10 +690,16 @@ try:
 except Exception as e:
     check("Render report validates against schema", False, str(e))
 
+try:
+    validate_artifact("final_review", final_review)
+    check("Final review validates against schema", True)
+except Exception as e:
+    check("Final review validates against schema", False, str(e))
+
 write_checkpoint(
     PIPELINE_DIR, PROJECT_ID, "compose", "completed",
-    artifacts={"render_report": render_report},
-    pipeline_type="animated-explainer",
+    artifacts={"render_report": render_report, "final_review": final_review},
+    pipeline_type=PIPELINE_TYPE,
     cost_snapshot=tracker.cost_snapshot(),
 )
 
@@ -617,7 +741,7 @@ except Exception as e:
 write_checkpoint(
     PIPELINE_DIR, PROJECT_ID, "publish", "completed",
     artifacts={"publish_log": publish_log},
-    pipeline_type="animated-explainer",
+    pipeline_type=PIPELINE_TYPE,
 )
 
 # ===================================================================
@@ -625,10 +749,15 @@ write_checkpoint(
 # ===================================================================
 print("\n--- Final validation ---")
 
-E2E_STAGES = ["research", "proposal", "script", "scene_plan", "assets", "edit", "compose", "publish"]
-completed = get_completed_stages(PIPELINE_DIR, PROJECT_ID)
+manifest = load_pipeline(PIPELINE_TYPE)
+E2E_STAGES = get_stage_order(manifest)
+STAGE_PRODUCES = {
+    stage["name"]: stage.get("produces", [])
+    for stage in manifest["stages"]
+}
+completed = get_completed_stages(PIPELINE_DIR, PROJECT_ID, PIPELINE_TYPE)
 check("All 8 stages completed", len(completed) == 8, f"completed={completed}")
-check("Next stage is None (done)", get_next_stage(PIPELINE_DIR, PROJECT_ID, "animated-explainer") is None)
+check("Next stage is None (done)", get_next_stage(PIPELINE_DIR, PROJECT_ID, PIPELINE_TYPE) is None)
 check("Stages in correct order", completed == E2E_STAGES, f"{completed}")
 
 # Verify all checkpoints are readable
@@ -636,8 +765,11 @@ for stage in E2E_STAGES:
     cp = read_checkpoint(PIPELINE_DIR, PROJECT_ID, stage)
     check(f"Checkpoint {stage} readable", cp is not None)
     if cp:
-        expected_artifact = CANONICAL_STAGE_ARTIFACTS[stage]
-        check(f"  Has canonical artifact '{expected_artifact}'", expected_artifact in cp.get("artifacts", {}))
+        for expected_artifact in STAGE_PRODUCES[stage]:
+            check(
+                f"  Has manifest artifact '{expected_artifact}'",
+                expected_artifact in cp.get("artifacts", {}),
+            )
 
 # Cost summary
 print(f"\n  Final cost: {tracker.cost_snapshot()}")

@@ -6,6 +6,7 @@ stability: beta
 default_checkpoint_policy: guided
 stages:
   - name: research
+    skill: pipelines/framework-smoke/research-director
     produces:
       - research_brief
     tools_available: []
@@ -14,6 +15,7 @@ stages:
     success_criteria:
       - Produces a schema-valid research_brief artifact
   - name: script
+    skill: pipelines/framework-smoke/script-director
     required_artifacts_in:
       - research_brief
     produces:

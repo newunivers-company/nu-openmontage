@@ -228,20 +228,25 @@ research → proposal → script → scene_plan → assets → edit → compose 
 Each stage:
 1. Has a **stage-director skill** (Markdown instructions for the agent)
 2. Declares **tools_available** (what the agent can call)
-3. **Produces** one or more canonical artifacts
+3. **Produces** the schema-backed artifacts declared in `produces`
 4. Has **review_focus** criteria and **success_criteria**
 5. Can require **human approval** before proceeding
 
 Specialized pipelines may insert domain-specific stages. For example,
 `character-animation` adds `character_design` and `rig_plan` before
 `scene_plan`, then emits a HyperFrames workspace and final deliverable at
-`projects/<project-name>/renders/final.mp4`.
+`<paths.projects_dir>/<project-name>/renders/final.mp4`. In this deployment,
+`paths.projects_dir` points to `/mnt/newunivers-sdb/nu-openmontage/projects`.
 
 ---
 
 ## Checkpoint System
 
-Checkpoints persist pipeline state as JSON in the project's `pipeline/` directory.
+Checkpoints persist pipeline state as JSON under the configured pipeline directory:
+`<pipeline_dir>/<project_id>/checkpoint_<stage>.json`. In project workspaces,
+`pipeline_dir` is normally the project's `pipeline/` directory. The global
+configuration also points `paths.pipeline_dir` to the NAS pipeline archive at
+`/mnt/newunivers-sdb/nu-openmontage/pipeline`.
 
 ```json
 {
@@ -259,7 +264,7 @@ Checkpoints persist pipeline state as JSON in the project's `pipeline/` director
 }
 ```
 
-**Status values:** `pending` | `in_progress` | `awaiting_human` | `completed` | `failed`
+**Status values:** `in_progress` | `awaiting_human` | `completed` | `failed`
 
 **Checkpoint policies:**
 - `guided` — checkpoint at key creative stages, auto-proceed on mechanical ones
@@ -268,18 +273,27 @@ Checkpoints persist pipeline state as JSON in the project's `pipeline/` director
 
 **Functions:** `write_checkpoint()`, `read_checkpoint()`, `get_latest_checkpoint()`, `get_completed_stages()`, `get_next_stage()`
 
-### Canonical Artifacts (11 types, all JSON-schema validated)
+### Stage Artifact Contracts
+
+Pipeline manifests declare each stage's durable outputs in `stages[].produces`.
+A completed or awaiting-human checkpoint must include every artifact listed
+there, and every artifact with a schema in `schemas/artifacts/` is validated
+before the checkpoint is written.
 
 | Artifact | Stage | Contains |
 |----------|-------|----------|
 | `research_brief` | research | Landscape analysis, data points, audience insights, angles |
-| `proposal_packet` | proposal | Concept options, production plan, cost estimates, approval gate |
+| `proposal_packet` | proposal | Concept options, production plan, renderer/runtime choice, cost estimates, approval gate |
+| `decision_log` | proposal/idea | Provider, renderer, fallback, budget, and creative decisions |
 | `brief` | idea | Title, hook, key points, tone, style, platform, duration |
 | `script` | script | Timestamped sections with enhancement cues, pronunciation guides |
 | `scene_plan` | scene_plan | Scene definitions with type, description, timing |
+| `character_design` | character_design | Character definitions for local rigged animation |
+| `rig_plan` / `pose_library` | rig_plan | Rig parts, pivots, layers, poses, and action cycles |
 | `asset_manifest` | assets | Generated assets with path, source tool, scene association |
 | `edit_decisions` | edit | Editorial cuts with in/out timings |
 | `render_report` | compose | Output metadata (format, resolution, duration) |
+| `final_review` | compose | Post-render technical probe, visual/audio spotcheck, promise and subtitle checks |
 | `publish_log` | publish | Platform publication entries with status |
 | `review` | (any) | Reviewer feedback and approval records |
 | `cost_log` | (any) | Budget tracking entries |
@@ -369,11 +383,13 @@ output:
   default_crf: 23
 
 paths:
-  pipeline_dir: pipeline
+  nas_root: /mnt/newunivers-sdb/nu-openmontage
+  projects_dir: /mnt/newunivers-sdb/nu-openmontage/projects
+  pipeline_dir: /mnt/newunivers-sdb/nu-openmontage/pipeline
   library_dir: library
   styles_dir: styles
   skills_dir: skills
-  output_dir: output
+  output_dir: /mnt/newunivers-sdb/nu-openmontage/outputs
 ```
 
 All config is validated via Pydantic models in `lib/config_model.py`.

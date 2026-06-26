@@ -11,7 +11,7 @@
     "description": { "type": "string" },
     "category": {
       "type": "string",
-      "enum": ["talking_head", "generated", "hybrid", "screen_recording", "animation", "cinematic", "custom"]
+      "enum": ["talking_head", "generated", "hybrid", "screen_recording", "animation", "cinematic", "documentary", "custom"]
     },
     "stability": {
       "type": "string",
@@ -129,6 +129,24 @@
         "supported": { "type": "boolean", "default": false },
         "analysis_depth": { "type": "string", "enum": ["transcript_only", "standard", "deep"], "default": "standard" },
         "analysis_tools": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "production_modes": {
+      "type": "array",
+      "description": "Optional production-mode choices the planning stage can present before execution.",
+      "items": {
+        "type": "object",
+        "required": ["name"],
+        "properties": {
+          "name": { "type": "string" },
+          "description": { "type": "string" },
+          "required_tools": { "type": "array", "items": { "type": "string" } },
+          "optional_tools": { "type": "array", "items": { "type": "string" } },
+          "best_for": { "type": "array", "items": { "type": "string" } },
+          "agent_skills": { "type": "array", "items": { "type": "string" } },
+          "scene_type": { "type": "string" }
+        },
+        "additionalProperties": false
       }
     },
     "metadata": { "type": "object" },

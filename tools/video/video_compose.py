@@ -1463,7 +1463,7 @@ class VideoCompose(BaseTool):
         """
         result: dict[str, Any] = {
             "transcript_matches_script": False,
-            "word_accuracy": None,
+            "word_accuracy": 0.0,
             "script_word_count": 0,
             "transcript_word_count": 0,
             "spurious_punctuation_words": [],
@@ -2159,9 +2159,10 @@ class VideoCompose(BaseTool):
         # Layer 2: edit_decisions subtitle style
         if edit_decisions:
             ed_style = edit_decisions.get("subtitles", {}).get("style", {})
-            for k, v in ed_style.items():
-                if v is not None:
-                    resolved[k] = v
+            if isinstance(ed_style, dict):
+                for k, v in ed_style.items():
+                    if v is not None:
+                        resolved[k] = v
 
         # Layer 3: Explicit override (highest priority)
         if explicit_style:

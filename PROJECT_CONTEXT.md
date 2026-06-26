@@ -49,12 +49,13 @@ Each tool's `agent_skills[]` field bridges Layer 1 → Layer 3. See `skills/INDE
   - Example: `tts_selector` + `elevenlabs_tts` / `google_tts` / `openai_tts` / `piper_tts`
   - Example: `video_selector` + `heygen_video` / `wan_video` / `hunyuan_video` / `ltx_video_local` / `ltx_video_modal` / `cogvideo_video`
 - **Style playbooks:** YAML defining visual language, typography, motion, audio, asset generation constraints
-- **Artifacts are canonical:** `brief`, `script`, `scene_plan`, `asset_manifest`, `edit_decisions`, `render_report`, `publish_log`
+- **Artifacts are manifest contracts:** each completed stage must write every artifact declared in `stages[].produces`
 - **Every tool inherits from `tools/base_tool.py`** (ToolContract)
 - **Checkpoint policy** lives in pipeline manifest (`human_approval_default` per stage) + `skills/meta/checkpoint-protocol.md`
 - **Reviewer** is a meta skill (`skills/meta/reviewer.md`), advisory, max 2 rounds
 - **Cost tracker** (`tools/cost_tracker.py`) manages budget: estimate -> reserve -> reconcile
-- **Canonical artifacts** validated against JSON schemas in `schemas/artifacts/`
+- **Schema-backed artifacts** validated against JSON schemas in `schemas/artifacts/`
+- **Generated outputs live on NAS:** default project workspaces and durable archives are under `/mnt/newunivers-sdb/nu-openmontage`
 
 ## Key Files
 
@@ -62,12 +63,17 @@ Each tool's `agent_skills[]` field bridges Layer 1 → Layer 3. See `skills/INDE
 |------|---------|
 | `config.yaml` | Global configuration |
 | `lib/config_model.py` | Runtime config loader (Pydantic) |
+| `lib/nu_integrations.py` | Shared NewUnivers library import fallback for sibling checkouts |
 | `lib/checkpoint.py` | Checkpoint writer/reader |
 | `lib/pipeline_loader.py` | Pipeline manifest loader + helpers |
 | `lib/media_profiles.py` | Platform-specific render profiles |
 | `styles/playbook_loader.py` | Style playbook loader + validator + design intelligence (color/type/a11y) |
 | `tools/base_tool.py` | ToolContract base class |
 | `tools/tool_registry.py` | Tool discovery and reporting |
+| `tools/llm/llm_router.py` | `nu-llm-routing-lib` adapter for chat, structured JSON, route profiles, and prompt rewrite |
+| `tools/generation/resource_generator.py` | `nu-resource-gen-lib` adapter for catalog-driven image/video/audio/3D resource generation |
+| `tools/graphics/nu_resource_image.py`, `tools/video/nu_resource_video.py`, `tools/audio/nu_resource_tts.py` | Selector-compatible `nu-resource-gen-lib` wrappers for image, video, and voice generation |
+| `tools/storage/prepare_nas_storage.py` | Creates the NAS layout and syncs existing QA/E2E outputs |
 | `tools/cost_tracker.py` | Budget governance |
 | `tools/video/video_stitch.py` | Multi-clip assembly (stitch, spatial, validate, preview) |
 | `tools/video/video_compose.py` | Runtime-aware composition orchestrator — routes to Remotion / HyperFrames / FFmpeg based on `edit_decisions.render_runtime` |

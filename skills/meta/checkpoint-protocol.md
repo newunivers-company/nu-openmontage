@@ -30,7 +30,7 @@ Gather everything needed for the checkpoint:
 
 1. **Stage name** — which stage just completed
 2. **Status** — `"completed"` (or `"awaiting_human"` if approval needed)
-3. **Artifacts** — the canonical artifact(s) produced by this stage
+3. **Artifacts** — every artifact listed in the current manifest stage's `produces`
 4. **Metadata** — review findings, cost snapshot, timing info
 
 ### Step 3: Write Checkpoint
@@ -39,16 +39,18 @@ Call the checkpoint utility:
 
 ```python
 write_checkpoint(
-    pipeline_dir,      # Project working directory
+    pipeline_dir,      # Configured pipeline directory
     project_name,      # Project identifier
     stage_name,        # e.g., "idea"
     status,            # "completed" or "awaiting_human"
     artifacts,         # {"brief": {...}} — the stage's output
+    pipeline_type=pipeline_name,
 )
 ```
 
 The checkpoint utility will:
-- Validate the artifact against its schema
+- Validate every schema-backed artifact
+- Require all manifest-declared `produces` artifacts for `completed` / `awaiting_human`
 - Write the checkpoint JSON to disk
 - Include timestamp and stage metadata
 
@@ -58,13 +60,14 @@ Long-running stages (like `assets` or `compose` loops) can fail midway due to AP
 
 1. **Write partial progress**: Every time you successfully generate a significant item (e.g., one scene's assets, one clip), write an `in_progress` checkpoint.
 
-   `in_progress` checkpoints may omit the stage's canonical artifact, but any artifact stored under a known artifact name is still schema-validated. If the partial data is not yet a valid canonical artifact, store it under `metadata.partial_progress` instead of `artifacts`.
+   `in_progress` checkpoints may omit the stage's required `produces` artifacts, but any artifact stored under a known artifact name is still schema-validated. If the partial data is not yet a valid artifact, store it under `metadata.partial_progress` instead of `artifacts`.
    ```python
    write_checkpoint(
        pipeline_dir, project_name,
        stage="assets",
        status="in_progress",
-       artifacts={},  # no incomplete canonical artifact yet
+       artifacts={},  # no incomplete schema artifact yet
+       pipeline_type=pipeline_name,
        metadata={
            "partial_progress": {
                "asset_manifest_draft": partial_manifest_dict,
@@ -116,7 +119,7 @@ When `human_approval_default: true`:
 After checkpoint is written and approved (if needed):
 
 ```python
-next_stage = get_next_stage(pipeline_dir, project_name)
+next_stage = get_next_stage(pipeline_dir, project_name, pipeline_type=pipeline_name)
 ```
 
 This reads all existing checkpoints and returns the next stage that needs to run, or `None` if the pipeline is complete.
@@ -126,7 +129,7 @@ This reads all existing checkpoints and returns the next stage that needs to run
 At the START of any pipeline run (not just after a stage), always check for existing progress:
 
 ```python
-next_stage = get_next_stage(pipeline_dir, project_name)
+next_stage = get_next_stage(pipeline_dir, project_name, pipeline_type=pipeline_name)
 ```
 
 If `next_stage` is not the first stage:
@@ -159,8 +162,8 @@ The sample checkpoint:
 3. Action: approve (→ proceed to script), revise (→ re-generate sample), abort
 
 The sample checkpoint is NOT a pipeline stage — it's a sub-checkpoint within the
-proposal stage. It does not produce a canonical artifact. It produces a rendered
-preview clip stored at `projects/<name>/assets/sample/sample_v{N}.mp4`.
+proposal stage. It does not produce a manifest stage artifact. It produces a
+rendered preview clip stored at `projects/<name>/assets/sample/sample_v{N}.mp4`.
 
 **Presentation format:**
 ```

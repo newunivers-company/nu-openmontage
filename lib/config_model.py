@@ -55,6 +55,8 @@ class OutputConfig(BaseModel):
 
 
 class PathsConfig(BaseModel):
+    nas_root: Optional[str] = None
+    projects_dir: str = "projects"
     pipeline_dir: str = "pipeline"
     library_dir: str = "library"
     styles_dir: str = "styles"
@@ -89,4 +91,9 @@ class OpenMontageConfig(BaseModel):
         if project_root is None:
             project_root = Path(__file__).resolve().parent.parent
         value = getattr(self.paths, key)
-        return (project_root / value).resolve()
+        if value is None:
+            raise ValueError(f"Path config {key!r} is not set")
+        path = Path(value).expanduser()
+        if path.is_absolute():
+            return path.resolve()
+        return (project_root / path).resolve()

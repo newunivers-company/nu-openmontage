@@ -26,8 +26,10 @@ output:
   default_crf: 23
 
 paths:
-  pipeline_dir: pipeline
+  nas_root: /mnt/newunivers-sdb/nu-openmontage
+  projects_dir: /mnt/newunivers-sdb/nu-openmontage/projects
+  pipeline_dir: /mnt/newunivers-sdb/nu-openmontage/pipeline
   library_dir: library
   styles_dir: styles
   skills_dir: skills
-  output_dir: output
+  output_dir: /mnt/newunivers-sdb/nu-openmontage/outputs

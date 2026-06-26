@@ -1,0 +1,1 @@
+"""General resource-generation tools."""

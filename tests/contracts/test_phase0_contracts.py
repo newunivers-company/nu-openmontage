@@ -106,6 +106,7 @@ def sample_artifact(name: str) -> dict:
             "production_plan": {
                 "pipeline": "animated-explainer",
                 "render_runtime": "remotion",
+                "renderer_family": "explainer-data",
                 "stages": [
                     {"stage": "script", "tools": [], "approach": "Write from research"},
                     {"stage": "assets", "tools": [{"tool_name": "tts_selector", "role": "narration", "available": True}], "approach": "Generate assets"},
@@ -172,12 +173,47 @@ def sample_artifact(name: str) -> dict:
     if name == "edit_decisions":
         return {
             "version": "1.0",
+            "renderer_family": "explainer-data",
+            "render_runtime": "ffmpeg",
             "cuts": [
                 {
                     "id": "cut-1",
                     "source": "asset-1",
                     "in_seconds": 0,
                     "out_seconds": 10,
+                }
+            ],
+        }
+    if name == "decision_log":
+        return {
+            "version": "1.0",
+            "project_id": "proj",
+            "decisions": [
+                {
+                    "decision_id": "d-001",
+                    "stage": "proposal",
+                    "category": "render_runtime_selection",
+                    "subject": "Render runtime for QA fixture",
+                    "options_considered": [
+                        {
+                            "option_id": "ffmpeg",
+                            "label": "FFmpeg",
+                            "score": 1.0,
+                            "reason": "Available deterministic local render path",
+                        },
+                        {
+                            "option_id": "remotion",
+                            "label": "Remotion",
+                            "score": 0.5,
+                            "reason": "Higher-fidelity composition path",
+                            "rejected_because": "Not required for this fixture",
+                        },
+                    ],
+                    "selected": "ffmpeg",
+                    "reason": "Keeps the contract fixture deterministic while preserving explicit governance",
+                    "user_visible": False,
+                    "user_approved": True,
+                    "confidence": 0.9,
                 }
             ],
         }
@@ -190,6 +226,145 @@ def sample_artifact(name: str) -> dict:
                     "format": "mp4",
                     "resolution": "1920x1080",
                     "duration_seconds": 60,
+                }
+            ],
+        }
+    if name == "final_review":
+        return {
+            "version": "1.0",
+            "output_path": "renders/output.mp4",
+            "status": "pass",
+            "checks": {
+                "technical_probe": {
+                    "valid_container": True,
+                    "duration_seconds": 60,
+                    "resolution": "1920x1080",
+                    "fps": 30,
+                    "has_audio": True,
+                    "codec": "h264",
+                    "file_size_bytes": 1024,
+                    "issues": [],
+                },
+                "visual_spotcheck": {
+                    "frames_sampled": 4,
+                    "frame_paths": [],
+                    "black_frames_detected": False,
+                    "broken_overlays": False,
+                    "missing_assets": False,
+                    "unreadable_text": False,
+                    "issues": [],
+                },
+                "audio_spotcheck": {
+                    "narration_present": True,
+                    "music_present": False,
+                    "unexpected_silence": False,
+                    "clipping_detected": False,
+                    "mix_intelligible": True,
+                    "issues": [],
+                },
+                "promise_preservation": {
+                    "delivery_promise_honored": True,
+                    "renderer_family_used": "explainer-data",
+                    "render_runtime_used": "ffmpeg",
+                    "runtime_swap_detected": False,
+                    "runtime_swap_check": "ok - proposal/runtime match",
+                    "motion_ratio_actual": 1.0,
+                    "silent_downgrade_detected": False,
+                    "issues": [],
+                },
+                "subtitle_check": {
+                    "subtitles_expected": False,
+                    "subtitles_present": False,
+                    "coverage_ratio": 0,
+                    "timing_drift_detected": False,
+                    "issues": [],
+                },
+            },
+            "issues_found": [],
+            "recommended_action": "present_to_user",
+        }
+    if name == "character_design":
+        return {
+            "version": "1.0",
+            "style": {
+                "visual_style": "clean vector",
+                "palette": ["#0F172A", "#22C55E"],
+                "line_style": "rounded",
+                "texture": "flat",
+            },
+            "characters": [
+                {
+                    "id": "host",
+                    "display_name": "Host",
+                    "role": "narrator",
+                    "body_type": "simple humanoid",
+                    "style": "flat vector",
+                    "required_emotions": ["neutral", "excited"],
+                    "required_actions": ["gesture", "point"],
+                    "required_views": ["front"],
+                }
+            ],
+        }
+    if name == "rig_plan":
+        return {
+            "version": "1.0",
+            "characters": [
+                {
+                    "character_id": "host",
+                    "rig_type": "svg_rig",
+                    "parts": [
+                        {"id": "body", "kind": "torso", "layer": 1},
+                        {"id": "head", "kind": "head", "layer": 2, "parent": "body"},
+                    ],
+                    "joints": {
+                        "body": {"pivot": [0, 0]},
+                        "head": {"pivot": [0, -40], "rotation": [-10, 10]},
+                    },
+                    "layers": ["body", "head"],
+                    "views": ["front"],
+                    "required_poses": ["idle"],
+                    "required_actions": ["gesture"],
+                }
+            ],
+        }
+    if name == "pose_library":
+        return {
+            "version": "1.0",
+            "characters": [
+                {
+                    "character_id": "host",
+                    "poses": {
+                        "idle": {
+                            "description": "Neutral standing pose",
+                            "parts": {"head": {"rotation": 0}},
+                            "expression": "neutral",
+                            "hold_frames": 12,
+                            "transition": "ease-in-out",
+                        }
+                    },
+                    "mouth_shapes": {"closed": {}, "open": {}},
+                    "action_cycles": {"gesture": {"frames": ["idle"]}},
+                }
+            ],
+        }
+    if name == "action_timeline":
+        return {
+            "version": "1.0",
+            "fps": 30,
+            "scenes": [
+                {
+                    "scene_id": "scene-1",
+                    "start_seconds": 0,
+                    "end_seconds": 5,
+                    "actions": [
+                        {
+                            "at_seconds": 0,
+                            "duration_seconds": 5,
+                            "character_id": "host",
+                            "action": "gesture",
+                            "pose": "idle",
+                        }
+                    ],
                 }
             ],
         }
@@ -262,6 +437,8 @@ class TestConfig:
     def test_load_from_yaml(self):
         config = OpenMontageConfig.load()
         assert config.budget.total_usd == 10.0
+        assert config.paths.nas_root == "/mnt/newunivers-sdb/nu-openmontage"
+        assert str(config.resolve_path("projects_dir")) == "/mnt/newunivers-sdb/nu-openmontage/projects"
 
 
 # ---- Schemas ----
@@ -352,6 +529,70 @@ class TestCheckpoint:
         cp = read_checkpoint(tmp_path, "proj", "proposal")
         assert cp is not None
         assert "video_analysis_brief" in cp["artifacts"]
+
+    def test_manifest_produced_artifacts_required_with_pipeline_type(self, tmp_path):
+        with pytest.raises(CheckpointValidationError, match="final_review"):
+            write_checkpoint(
+                tmp_path,
+                "proj",
+                "compose",
+                "completed",
+                {"render_report": sample_artifact("render_report")},
+                pipeline_type="animated-explainer",
+            )
+
+    def test_manifest_multi_artifact_stage_roundtrip(self, tmp_path):
+        write_checkpoint(
+            tmp_path,
+            "proj",
+            "compose",
+            "completed",
+            {
+                "render_report": sample_artifact("render_report"),
+                "final_review": sample_artifact("final_review"),
+            },
+            pipeline_type="animated-explainer",
+        )
+
+        cp = read_checkpoint(tmp_path, "proj", "compose")
+        assert cp is not None
+        assert "render_report" in cp["artifacts"]
+        assert "final_review" in cp["artifacts"]
+
+    def test_character_animation_custom_stages_are_validated(self, tmp_path):
+        write_checkpoint(
+            tmp_path,
+            "proj",
+            "character_design",
+            "completed",
+            {"character_design": sample_artifact("character_design")},
+            pipeline_type="character-animation",
+        )
+
+        with pytest.raises(CheckpointValidationError, match="pose_library"):
+            write_checkpoint(
+                tmp_path,
+                "proj",
+                "rig_plan",
+                "completed",
+                {"rig_plan": sample_artifact("rig_plan")},
+                pipeline_type="character-animation",
+            )
+
+        write_checkpoint(
+            tmp_path,
+            "proj",
+            "rig_plan",
+            "completed",
+            {
+                "rig_plan": sample_artifact("rig_plan"),
+                "pose_library": sample_artifact("pose_library"),
+            },
+            pipeline_type="character-animation",
+        )
+
+    def test_get_next_stage_uses_pipeline_specific_order(self, tmp_path):
+        assert get_next_stage(tmp_path, "proj", "screen-demo") == "idea"
 
 
 # ---- Pipeline manifests ----
